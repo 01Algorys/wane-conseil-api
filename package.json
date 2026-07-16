@@ -1,0 +1,43 @@
+{
+  "name": "wn-conseil-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 4001",
+    "build": "prisma generate && next build",
+    "start": "next start -p 4001",
+    "lint": "eslint .",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "seed": "prisma db seed"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "bcryptjs": "^2.4.3",
+    "date-fns": "4.1.0",
+    "formidable": "^3.5.4",
+    "next": "16.2.6",
+    "next-auth": "beta",
+    "nodemailer": "^7.0.0",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.22.0",
+    "react": "^19",
+    "react-dom": "^19",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "prisma": "^5.16.0",
+    "tsx": "^4.22.3",
+    "typescript": "5.7.3"
+  }
+}

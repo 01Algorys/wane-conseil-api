@@ -1,0 +1,495 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  password  String
+  role      Role      @default(CLIENT)
+  firstName String
+  lastName  String
+  phone     String?
+  consentAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  clientProfile    Client?       @relation("ClientProfile")
+  adminProfile     Admin?
+  assignedLeads    Lead[]        @relation("AssignedTo")
+  createdLeads     Lead[]        @relation("CreatedBy")
+  tasks            Task[]        @relation("AssignedTask")
+  notes            Note[]
+  logs             ActivityLog[]
+  sentMessages     Message[]     @relation("MessageSender")
+  receivedMessages Message[]     @relation("MessageReceiver")
+  contratsAgent    Contrat[]     @relation("AgentAssigne")
+  imports          ImportLog[]
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  COMMERCIAL
+  CLIENT
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- CLIENT (fiche 360) : reprend §3.1 du cahier des charges ---
+// userId reste optionnel : un client importé depuis Excel n'a pas de compte
+// espace-client tant qu'il ne s'est pas inscrit.
+model Client {
+  id     String     @id @default(cuid())
+  userId String?    @unique
+  user   User?      @relation("ClientProfile", fields: [userId], references: [id])
+  type   ClientType @default(PARTICULIER)
+
+  civilite     String?
+  nom          String?
+  prenom       String?
+  telephone    String?
+  email        String?
+  numeroPermis String?
+  paysPermis   String?
+  notes        String? @db.Text
+  isVip        Boolean @default(false)
+
+  dateNaissance   DateTime?
+  nationalite     String?
+  adresse         String?
+  ville           String?
+  pays            String?   @default("France")
+  codePostal      String?
+  raisonSociale   String?
+  siret           String?
+  secteurActivite String?
+  societe         Client?   @relation("SocieteParticuliers", fields: [societeId], references: [id])
+  societeId       String?
+  particuliers    Client[]  @relation("SocieteParticuliers")
+
+  contrats   Contrat[]
+  devis      Devis[]
+  documents  Document[]
+  leads      Lead[]
+  taches     Task[]       @relation("ClientTasks")
+  rendezVous RendezVous[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nom, prenom])
+  @@index([email])
+  @@index([telephone])
+}
+
+enum ClientType {
+  PARTICULIER
+  PROFESSIONNEL
+}
+
+model Lead {
+  id            String     @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String
+  phone         String
+  ville         String?
+  pays          String?
+  nationalite   String?
+  dateNaissance DateTime?
+  typeAssurance String
+  compagnie     String?
+  typeContrat   String?
+  statut        LeadStatus @default(NOUVEAU)
+  assignedToId  String?
+  assignedTo    User?      @relation("AssignedTo", fields: [assignedToId], references: [id])
+  createdById   String?
+  createdBy     User?      @relation("CreatedBy", fields: [createdById], references: [id])
+  clientId      String?
+  client        Client?    @relation(fields: [clientId], references: [id])
+  documents     Document[]
+  tasks         Task[]
+  notes         Note[]
+  contrats      Contrat[]
+  formData      Json?
+  consentAt     DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+enum LeadStatus {
+  NOUVEAU
+  EN_COURS
+  DEVIS_ENVOYE
+  CONTRAT_SIGNE
+  PERDU
+  ANNULE
+}
+
+// --- Référentiels paramétrables (§3.7, §3.8, §3.9, §4, §7.1, §11.2) ---
+// Un seul modèle générique pour toutes les listes "créées à la volée" et
+// éditables depuis Paramètres, sans valeurs en dur dans le code.
+enum ListeReferenceType {
+  DISTRIBUTEUR
+  PRODUIT
+  STATUT_CONTRAT
+  TYPE_DOCUMENT
+  CATEGORIE_DEPENSE
+}
+
+model ListeReference {
+  id        String             @id @default(cuid())
+  type      ListeReferenceType
+  nom       String
+  couleur   String?
+  ordre     Int                @default(0)
+  actif     Boolean            @default(true)
+  createdAt DateTime           @default(now())
+
+  contratsDistributeur Contrat[]      @relation("ContratDistributeur")
+  contratsProduit      Contrat[]      @relation("ContratProduit")
+  contratsStatut       Contrat[]      @relation("ContratStatutRef")
+  devisDistributeur    Devis[]        @relation("DevisDistributeur")
+  devisProduit         Devis[]        @relation("DevisProduit")
+  documentsType        Document[]     @relation("DocumentTypeRef")
+  factureAchats        FactureAchat[] @relation("FactureAchatCategorie")
+
+  @@unique([type, nom])
+  @@index([type])
+}
+
+// --- CONTRAT (§3.2, §4, §6, §16.1) ---
+model Contrat {
+  id            String  @id @default(cuid())
+  numero        String  @unique
+  numeroDemande String?
+
+  clientId String
+  client   Client  @relation(fields: [clientId], references: [id])
+  leadId   String?
+  lead     Lead?   @relation(fields: [leadId], references: [id])
+
+  distributeurId String?
+  distributeur   ListeReference? @relation("ContratDistributeur", fields: [distributeurId], references: [id])
+  produitId      String?
+  produitRef     ListeReference? @relation("ContratProduit", fields: [produitId], references: [id])
+  statutRefId    String?
+  statutRef      ListeReference? @relation("ContratStatutRef", fields: [statutRefId], references: [id])
+
+  // Champs hérités (compat portail client) : conservés pour ne pas casser
+  // l'espace client existant, en parallèle des nouveaux champs CDC.
+  typeAssurance String @default("auto")
+  compagnie     String @default("")
+  statut        String @default("ACTIF")
+
+  marque          String?
+  modele          String?
+  immatriculation String?
+
+  dateDebut        DateTime
+  dateFin          DateTime
+  dateSouscription DateTime?
+  dateEffet        DateTime?
+  dureeJours       Int?
+
+  prime      Float
+  honoraires Float @default(0)
+
+  dateResiliation  DateTime?
+  motifResiliation String?
+  agentAssigneId   String?
+  agentAssigne     User?     @relation("AgentAssigne", fields: [agentAssigneId], references: [id])
+
+  notesInternes   String?   @db.Text
+  besoinsExprimes String?   @db.Text
+  dateRappel      DateTime?
+
+  documents        Document[]
+  factures         Facture[]
+  taches           Task[]             @relation("ContratTasks")
+  rendezVous       RendezVous[]
+  reclamations     Reclamation[]
+  statutHistorique StatutHistorique[]
+  devis            Devis?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statut])
+  @@index([dateFin])
+  @@index([distributeurId])
+}
+
+// --- DEVIS / Pipeline commercial (§3.3, §5) ---
+enum DevisStatutPipeline {
+  NOUVEAU
+  QUALIFIE
+  DEVIS_ENVOYE
+  RELANCE
+  NEGOCIATION
+  GAGNE
+  PERDU
+}
+
+model Devis {
+  id             String          @id @default(cuid())
+  clientId       String
+  client         Client          @relation(fields: [clientId], references: [id])
+  distributeurId String?
+  distributeur   ListeReference? @relation("DevisDistributeur", fields: [distributeurId], references: [id])
+  produitId      String?
+  produit        ListeReference? @relation("DevisProduit", fields: [produitId], references: [id])
+
+  statutPipeline DevisStatutPipeline @default(NOUVEAU)
+  montantEstime  Float?
+  dateCreation   DateTime            @default(now())
+  dateRelance    DateTime?
+  probabilite    Int?
+  motifPerte     String?
+
+  contratId String?  @unique
+  contrat   Contrat? @relation(fields: [contratId], references: [id])
+
+  notes           String? @db.Text
+  besoinsExprimes String? @db.Text
+
+  taches           Task[]             @relation("DevisTasks")
+  rendezVous       RendezVous[]
+  statutHistorique StatutHistorique[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([statutPipeline])
+}
+
+// --- FACTURE (§3.4, §6, §11.1) ---
+model Facture {
+  id                String    @id @default(cuid())
+  contratId         String
+  contrat           Contrat   @relation(fields: [contratId], references: [id])
+  numeroFacture     String    @unique
+  dateGeneration    DateTime  @default(now())
+  montantHt         Float
+  montantTtc        Float
+  fichierPdfUrl     String
+  statutEnvoi       String    @default("NON_ENVOYEE")
+  dateEnvoi         DateTime?
+  modeEnvoi         String?
+  emailDestinataire String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+
+  @@index([contratId])
+  @@index([statutEnvoi])
+}
+
+// --- DOCUMENT (§3.5, §7) ---
+model Document {
+  id     String @id @default(cuid())
+  nom    String
+  type   String
+  url    String
+  taille Int?
+
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  contratId String?
+  contrat   Contrat? @relation(fields: [contratId], references: [id])
+
+  typeDocumentId  String?
+  typeDocumentRef ListeReference? @relation("DocumentTypeRef", fields: [typeDocumentId], references: [id])
+  libelleAutre    String?
+  statutDocument  String          @default("EN_ATTENTE")
+  dateExpiration  DateTime?
+  motifRefus      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([statutDocument])
+  @@index([typeDocumentId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  contenu   String
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  details   String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  receiverId String
+  sender     User     @relation("MessageSender", fields: [senderId], references: [id])
+  receiver   User     @relation("MessageReceiver", fields: [receiverId], references: [id])
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+// --- TÂCHE (§3.6, §16.1 b) ---
+model Task {
+  id          String     @id @default(cuid())
+  type        TaskType
+  titre       String
+  description String?
+  statut      TaskStatus @default(A_TRAITER)
+  priorite    Priorite   @default(NORMALE)
+  echeance    DateTime?
+
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  clientId  String?
+  client    Client?  @relation("ClientTasks", fields: [clientId], references: [id])
+  contratId String?
+  contrat   Contrat? @relation("ContratTasks", fields: [contratId], references: [id])
+  devisId   String?
+  devis     Devis?   @relation("DevisTasks", fields: [devisId], references: [id])
+
+  assignedToId String?
+  assignedTo   User?    @relation("AssignedTask", fields: [assignedToId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([statut])
+  @@index([echeance])
+}
+
+enum TaskType {
+  APPEL
+  RELANCE_DEVIS
+  DOCUMENT_A_RECEVOIR
+  RENOUVELLEMENT
+  RECLAMATION
+  RELANCE_AMIABLE
+  REMBOURSEMENT
+  AVENANT
+  MODIFICATION_CONTRAT
+  RELANCE_DOCUMENT
+  SINISTRE
+  AUTRE
+}
+
+enum TaskStatus {
+  A_TRAITER
+  EN_COURS
+  TRAITE
+  ANNULE
+}
+
+enum Priorite {
+  BASSE
+  NORMALE
+  HAUTE
+  URGENTE
+}
+
+// --- AGENDA / RENDEZ-VOUS (§9) ---
+model RendezVous {
+  id        String   @id @default(cuid())
+  titre     String
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  contratId String?
+  contrat   Contrat? @relation(fields: [contratId], references: [id])
+  devisId   String?
+  devis     Devis?   @relation(fields: [devisId], references: [id])
+
+  dateDebut DateTime
+  dateFin   DateTime
+  typeRdv   String   @default("TELEPHONE")
+  lieu      String?
+  statut    String   @default("PREVU")
+  notes     String?  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dateDebut])
+  @@index([statut])
+}
+
+// --- COMPTABILITÉ : factures d'achat / justificatifs (§11.2, §11.3) ---
+model FactureAchat {
+  id          String          @id @default(cuid())
+  fournisseur String
+  categorieId String?
+  categorie   ListeReference? @relation("FactureAchatCategorie", fields: [categorieId], references: [id])
+  dateFacture DateTime
+  montantTtc  Float
+  fichierUrl  String
+  nomFichier  String
+  note        String?         @db.Text
+  dateAjout   DateTime        @default(now())
+
+  @@index([dateFacture])
+  @@index([categorieId])
+}
+
+// --- Réclamations (§16.1 a) ---
+model Reclamation {
+  id             String    @id @default(cuid())
+  contratId      String
+  contrat        Contrat   @relation(fields: [contratId], references: [id])
+  date           DateTime  @default(now())
+  texte          String    @db.Text
+  statut         String    @default("OUVERTE")
+  dateResolution DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// --- Historique de statut, lecture seule (§16.1 g) ---
+model StatutHistorique {
+  id            String   @id @default(cuid())
+  contratId     String?
+  contrat       Contrat? @relation(fields: [contratId], references: [id])
+  devisId       String?
+  devis         Devis?   @relation(fields: [devisId], references: [id])
+  entityType    String
+  ancienStatut  String?
+  nouveauStatut String
+  date          DateTime @default(now())
+}
+
+// --- Import Excel (§13) ---
+model ImportLog {
+  id              String   @id @default(cuid())
+  nomFichier      String
+  totalLignes     Int
+  clientsCrees    Int      @default(0)
+  contratsCrees   Int      @default(0)
+  doublonsIgnores Int      @default(0)
+  erreurs         Int      @default(0)
+  details         Json?
+  createdById     String?
+  createdBy       User?    @relation(fields: [createdById], references: [id])
+  createdAt       DateTime @default(now())
+}

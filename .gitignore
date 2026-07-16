@@ -1,0 +1,11 @@
+# Environment variables
+.env
+.env*.local
+
+# Common ignores
+node_modules
+.next/
+.DS_Store
+
+# Local file storage (uploads, generated invoices) - swap for S3/R2 in prod
+/storage/
