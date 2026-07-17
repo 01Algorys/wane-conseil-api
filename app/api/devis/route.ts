@@ -3,11 +3,22 @@ import { getActor } from '@/lib/request-actor'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { Prisma, DevisStatutPipeline } from '@prisma/client'
+import { notifyNewDevis } from '@/lib/notify'
 
 async function requireAuth(req: Request) {
   const token = await getActor(req)
   if (!token || !['SUPER_ADMIN', 'ADMIN', 'COMMERCIAL'].includes(token.role as string)) return null
   return token
+}
+
+// Partner sites (e.g. tempassur) create devis server-to-server before payment;
+// they never need to list/browse the CRM, so partner access is POST-only.
+async function requireWriteAuth(req: Request) {
+  const token = await getActor(req)
+  if (!token) return null
+  if (token.kind === 'partner') return token
+  if (['SUPER_ADMIN', 'ADMIN', 'COMMERCIAL'].includes(token.role as string)) return token
+  return null
 }
 
 export async function GET(req: Request) {
@@ -104,7 +115,7 @@ const createSchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const token = await requireAuth(req)
+  const token = await requireWriteAuth(req)
   if (!token) return NextResponse.json({ message: 'Non autorisé.' }, { status: 401 })
 
   const body = await req.json()
@@ -116,7 +127,10 @@ export async function POST(req: Request) {
   const { dateRelance, ...rest } = parsed.data
   const devis = await prisma.devis.create({
     data: { ...rest, dateRelance: dateRelance ? new Date(dateRelance) : null },
+    include: { client: true, distributeur: true, produit: true },
   })
+
+  void notifyNewDevis(devis, token.kind as 'user' | 'partner')
 
   return NextResponse.json(devis, { status: 201 })
 }

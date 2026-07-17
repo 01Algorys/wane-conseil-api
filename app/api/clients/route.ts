@@ -3,6 +3,7 @@ import { getActor } from '@/lib/request-actor'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { request } from 'https'
 
 const PAGE_SIZE = 25
 
@@ -10,6 +11,16 @@ async function requireAuth(req: Request) {
   const token = await getActor(req)
   if (!token || !['SUPER_ADMIN', 'ADMIN', 'COMMERCIAL'].includes(token.role as string)) return null
   return token
+}
+
+// Partner sites (e.g. tempassur) create clients server-to-server after a successful
+// payment; they never need to list/browse the CRM, so partner access is POST-only.
+async function requireWriteAuth(req: Request) {
+  const token = await getActor(req)
+  if (!token) return null
+  if (token.kind === 'partner') return token
+  if (['SUPER_ADMIN', 'ADMIN', 'COMMERCIAL'].includes(token.role as string)) return token
+  return null
 }
 
 export async function GET(req: Request) {
@@ -141,8 +152,9 @@ const createSchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const token = await requireAuth(req)
+  const token = await requireWriteAuth(req)
   if (!token) return NextResponse.json({ message: 'Non autorisé.' }, { status: 401 })
+    console.log('POST /api/clients', req.url, token)
 
   const body = await req.json()
   const parsed = createSchema.safeParse(body)
