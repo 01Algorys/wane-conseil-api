@@ -140,7 +140,7 @@ export async function notifyNewDevis(devis: DevisWithRelations, actorKind: 'user
       note: 'Ce devis n’est pas encore un contrat — il devient un contrat lors du paiement ou de sa transformation manuelle.',
     })
 
-    await sendEmail({ to: NOTIFY_TO, subject: `Nouveau devis — ${clientName(devis.client)}`, html })
+    await sendEmail({ to: NOTIFY_TO, subject: `Nouveau devis — ${clientName(devis.client)}`, html, type: 'NEW_DEVIS' })
     console.log('[notify] new-devis email sent for', devis.id)
   } catch (err) {
     console.error('[notify] failed to send new-devis email', err)
@@ -198,7 +198,7 @@ export async function notifyNewContrat(
       ],
     })
 
-    await sendEmail({ to: NOTIFY_TO, subject: `Nouveau contrat — ${contrat.numero}`, html })
+    await sendEmail({ to: NOTIFY_TO, subject: `Nouveau contrat — ${contrat.numero}`, html, type: 'NEW_CONTRAT' })
     console.log('[notify] new-contrat email sent for', contrat.id)
   } catch (err) {
     console.error('[notify] failed to send new-contrat email', err)

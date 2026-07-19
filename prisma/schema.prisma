@@ -493,3 +493,36 @@ model ImportLog {
   createdBy       User?    @relation(fields: [createdById], references: [id])
   createdAt       DateTime @default(now())
 }
+
+// --- Email delivery log (superadmin panel: Email Tracking Center) ---
+// Populated by lib/email.ts on every send. No open/click tracking (would
+// require a tracking pixel / link-rewrite system that doesn't exist yet) —
+// statuses are limited to what the SMTP call itself can tell us.
+enum EmailStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+model EmailLog {
+  id        String      @id @default(cuid())
+  recipient String
+  subject   String
+  type      String
+  html      String      @db.Text
+  status    EmailStatus @default(QUEUED)
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime    @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([recipient])
+}
+
+// --- Generic key/value settings store (superadmin panel: Settings module) ---
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}

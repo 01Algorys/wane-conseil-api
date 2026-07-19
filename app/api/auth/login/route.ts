@@ -3,6 +3,7 @@ import { z } from 'zod'
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { issueToken } from '@/lib/auth-token'
+import { logActivity } from '@/lib/audit'
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
 
   const passwordMatches = await bcrypt.compare(parsed.data.password, user.password)
   if (!passwordMatches) {
+    void logActivity({ userId: user.id, action: 'LOGIN_FAILED', details: 'Mot de passe incorrect', req })
     return NextResponse.json({ message: 'Identifiants invalides.' }, { status: 401 })
   }
 
@@ -35,6 +37,7 @@ export async function POST(req: Request) {
     email: user.email,
   }
   const token = await issueToken(payload)
+  void logActivity({ userId: user.id, action: 'LOGIN_SUCCESS', req })
 
   return NextResponse.json({ token, user: payload })
 }

@@ -18,6 +18,8 @@ export async function GET(req: Request) {
 
   const [
     activeContracts,
+    expiredContracts,
+    totalContracts,
     revenueResult,
     devisParEtapeRaw,
     devisTotal,
@@ -35,6 +37,8 @@ export async function GET(req: Request) {
     produits,
   ] = await Promise.all([
     prisma.contrat.count({ where: { statutRef: { nom: 'Actif' } } }),
+    prisma.contrat.count({ where: { dateFin: { lt: now } } }),
+    prisma.contrat.count(),
     prisma.contrat.aggregate({ _sum: { prime: true }, where: { createdAt: { gte: monthStart } } }),
     prisma.devis.groupBy({ by: ['statutPipeline'], _count: true }),
     prisma.devis.count(),
@@ -104,8 +108,11 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     activeContracts,
+    expiredContracts,
+    totalContracts,
     monthlyRevenue,
     devisParEtapeRaw,
+    devisTotal,
     tauxTransformation,
     contratsEcheance,
     documentsManquants,

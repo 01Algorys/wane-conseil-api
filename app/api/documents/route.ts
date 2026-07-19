@@ -12,6 +12,17 @@ async function requireAuth(req: Request) {
   return token
 }
 
+// Partner sites (e.g. tempassur) upload documents server-to-server right after
+// creating a devis, before any CRM user account is involved; they never need to
+// list/browse documents, so partner access is POST-only (mirrors devis/contrats).
+async function requireWriteAuth(req: Request) {
+  const token = await getActor(req)
+  if (!token) return null
+  if (token.kind === 'partner') return token
+  if (['SUPER_ADMIN', 'ADMIN', 'COMMERCIAL'].includes(token.role as string)) return token
+  return null
+}
+
 export async function GET(req: Request) {
   const token = await requireAuth(req)
   if (!token) return NextResponse.json({ message: 'Non autorisé.' }, { status: 401 })
@@ -78,16 +89,19 @@ export async function GET(req: Request) {
 }
 
 // Upload multi-fichiers (§7.2) : formData avec un ou plusieurs "file" +
-// clientId/contratId optionnels + typeDocumentId + libelleAutre optionnel.
+// clientId/contratId optionnels + typeDocumentId (ou typeDocumentLabel, résolu
+// ci-dessous — le site partenaire ne connaît pas les ids de référentiel internes)
+// + libelleAutre optionnel.
 export async function POST(req: Request) {
-  const token = await requireAuth(req)
+  const token = await requireWriteAuth(req)
   if (!token) return NextResponse.json({ message: 'Non autorisé.' }, { status: 401 })
 
   const formData = await req.formData()
   const files = formData.getAll('file') as File[]
   const clientId = (formData.get('clientId') as string) || null
   const contratId = (formData.get('contratId') as string) || null
-  const typeDocumentId = (formData.get('typeDocumentId') as string) || null
+  let typeDocumentId = (formData.get('typeDocumentId') as string) || null
+  const typeDocumentLabel = (formData.get('typeDocumentLabel') as string) || null
   const libelleAutre = (formData.get('libelleAutre') as string) || null
 
   if (files.length === 0) {
@@ -95,6 +109,13 @@ export async function POST(req: Request) {
   }
   if (!clientId && !contratId) {
     return NextResponse.json({ message: 'Un document doit être lié à un client ou un contrat.' }, { status: 422 })
+  }
+
+  if (!typeDocumentId && typeDocumentLabel) {
+    const ref = await prisma.listeReference.findFirst({
+      where: { type: 'TYPE_DOCUMENT', nom: { equals: typeDocumentLabel, mode: 'insensitive' } },
+    })
+    typeDocumentId = ref?.id ?? null
   }
 
   const folder = `${clientId ?? 'divers'}/${contratId ?? 'client'}`
