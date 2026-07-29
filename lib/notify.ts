@@ -2,7 +2,7 @@ import type { Client, Contrat, Devis, ListeReference } from '@prisma/client'
 import { sendEmail } from './email'
 import { DEVIS_PIPELINE_LABELS } from './labels'
 
-const NOTIFY_TO = process.env.NOTIFICATION_EMAIL || 'louaymezlini16@gmail.com'
+const NOTIFY_TO = process.env.NOTIFICATION_EMAIL || 'wane.conseils@gmail.com'
 const GOLD = '#C9A84C'
 const INK = '#0a0a0a'
 
