@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto'
 // (route protégée par auth), ce qui évite les liens publics permanents.
 const STORAGE_ROOT = path.join(process.cwd(), 'storage', 'uploads')
 
-export const MAX_FILE_SIZE = 40 * 1024 * 1024 // 40 Mo
+export const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100 Mo
 export const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/heic']
 
 // MIME-to-extension allowlist, checked together: `file.type` is browser-supplied
